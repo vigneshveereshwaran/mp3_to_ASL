@@ -1,198 +1,324 @@
 /**
- * HearLink ASL — Main Application Controller
- * Orchestrates Audio Recording, WebSocket communication, WASM Animation processing,
- * Preset Selectors, and 3D Avatar Rendering.
+ * MP4-to-ASL — Main Application Controller
+ * Synchronizes MP4 video timestamp playback, speech transcription, Gloss tokens,
+ * and 3D Avatar skeletal sign animations.
  */
 
-import { AudioRecorder } from './audio.js';
-import { WebSocketClient } from './websocket.js';
-import { WASMAnimationBridge } from './wasm_bridge.js';
-import { AvatarRenderer } from './avatar.js';
-
-class HearLinkApp {
+class MP4ToASLApp {
     constructor() {
-        this.audioRecorder = null;
-        this.wsClient = null;
-        this.wasmBridge = null;
         this.avatarRenderer = null;
-
-        this.frameQueue = [];
-        this.isPlayingAnimation = false;
-
-        // UI elements
-        this.btnRecord = document.getElementById('btn-record');
-        this.btnSend = document.getElementById('btn-send');
-        this.txtInput = document.getElementById('text-input');
-        this.presetSelect = document.getElementById('preset-select');
-        this.transcriptBox = document.getElementById('transcript-box');
-        this.glossBox = document.getElementById('gloss-box');
-        this.statusIndicator = document.getElementById('status-indicator');
-        this.statusText = document.getElementById('status-text');
-        this.metricAsr = document.getElementById('metric-asr');
-        this.metricGloss = document.getElementById('metric-gloss');
-        this.metricFps = document.getElementById('metric-fps');
-
-        this.init();
+        this.timeline = [];
+        this.activeSegmentIndex = -1;
+        this.isVideoLoaded = false;
+        this.isRecording = false;
+        this.mediaRecorder = null;
+        this._init();
     }
 
-    async init() {
-        console.log("[HearLinkApp] Initializing HearLink ASL Web Client...");
+    async _init() {
+        // Initialize 3D Avatar Renderer
+        const canvas = document.getElementById('three-canvas');
+        if (canvas && window.AvatarRenderer) {
+            this.avatarRenderer = new window.AvatarRenderer(canvas);
+        }
 
-        // 1. WASM Engine Initialization
-        this.wasmBridge = new WASMAnimationBridge();
-        await this.wasmBridge.init();
+        // Setup Event Handlers
+        this._setupVideoEvents();
+        this._setupInputEvents();
+        this._checkHealth();
 
-        // 2. 3D Avatar Scene Setup
-        const canvasContainer = document.getElementById('viewport-container');
-        this.avatarRenderer = new AvatarRenderer(canvasContainer);
+        // Hide loading overlay
+        const overlay = document.getElementById('loading-overlay');
+        if (overlay) {
+            setTimeout(() => overlay.classList.add('hidden'), 500);
+        }
+    }
 
-        // 3. WebSocket Client Setup
-        this.wsClient = new WebSocketClient({
-            onConnect: () => this.updateStatus(true, "Connected"),
-            onDisconnect: () => this.updateStatus(false, "Disconnected"),
-            onTranscript: (data) => this.handleTranscript(data),
-            onGloss: (data) => this.handleGloss(data),
-            onPoseFrames: (data) => this.handlePoseFrames(data)
-        });
-        this.wsClient.connect();
+    async _checkHealth() {
+        try {
+            const res = await fetch('/health');
+            const data = await res.json();
+            const dot = document.getElementById('backend-status-dot');
+            const txt = document.getElementById('backend-type-label');
+            if (dot) dot.classList.add('online');
+            if (txt) txt.textContent = data.neural_translator ? 'Neural ASL' : 'Rule ASL';
+        } catch {
+            const txt = document.getElementById('backend-type-label');
+            if (txt) txt.textContent = 'Offline';
+        }
+    }
 
-        // 4. Audio Recorder Setup
-        this.audioRecorder = new AudioRecorder((pcmBuffer) => {
-            this.wsClient.sendAudioChunk(pcmBuffer);
-        });
+    _setupVideoEvents() {
+        const video = document.getElementById('mp4-video');
+        const scrubber = document.getElementById('video-scrubber');
+        const playBtn = document.getElementById('btn-play-pause');
+        const fileInput = document.getElementById('video-file-input');
 
-        // 5. Attach Event Listeners
-        this.btnRecord.addEventListener('click', () => this.toggleRecord());
-        this.btnSend.addEventListener('click', () => this.sendText());
-        this.txtInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') this.sendText();
-        });
+        if (video) {
+            video.addEventListener('timeupdate', () => {
+                const curTime = video.currentTime;
+                const duration = video.duration || 1;
 
-        if (this.presetSelect) {
-            this.presetSelect.addEventListener('change', (e) => {
-                const text = e.target.value;
-                if (text) {
-                    this.txtInput.value = text;
-                    this.sendText();
+                if (scrubber) {
+                    scrubber.value = (curTime / duration) * 100;
+                }
+
+                const timeDisp = document.getElementById('time-display');
+                if (timeDisp) {
+                    timeDisp.textContent = `${this._formatTime(curTime)} / ${this._formatTime(duration)}`;
+                }
+
+                this._syncTimelineWithTime(curTime);
+            });
+
+            video.addEventListener('ended', () => {
+                if (playBtn) playBtn.textContent = '▶ Play';
+                this._setSigningBadge(null);
+            });
+        }
+
+        if (playBtn && video) {
+            playBtn.addEventListener('click', () => {
+                if (video.paused) {
+                    video.play();
+                    playBtn.textContent = '⏸ Pause';
+                } else {
+                    video.pause();
+                    playBtn.textContent = '▶ Play';
                 }
             });
         }
 
-        // 6. Start Pose Queue Consumer Loop (60 FPS)
-        this.startAnimationLoop();
-    }
-
-    updateStatus(online, text) {
-        if (online) {
-            this.statusIndicator.classList.add('online');
-        } else {
-            this.statusIndicator.classList.remove('online');
+        if (scrubber && video) {
+            scrubber.addEventListener('input', () => {
+                const duration = video.duration || 1;
+                video.currentTime = (scrubber.value / 100) * duration;
+            });
         }
-        this.statusText.textContent = text;
+
+        if (fileInput) {
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (file) this.uploadMP4Video(file);
+            });
+        }
     }
 
-    async toggleRecord() {
-        if (!this.audioRecorder.isRecording) {
-            try {
-                await this.audioRecorder.start();
-                this.btnRecord.classList.remove('btn-primary');
-                this.btnRecord.classList.add('btn-danger');
-                this.btnRecord.innerHTML = `
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>
-                    Stop Listening
-                `;
-            } catch (e) {
-                alert("Microphone permission denied or unsupported.");
+    _setupInputEvents() {
+        const sendBtn = document.getElementById('btn-send-text');
+        const textInput = document.getElementById('text-input');
+        const presetSelect = document.getElementById('preset-select');
+        const micBtn = document.getElementById('btn-mic-record');
+
+        if (sendBtn && textInput) {
+            sendBtn.addEventListener('click', () => this.translateCustomText());
+            textInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') this.translateCustomText();
+            });
+        }
+
+        if (presetSelect && textInput) {
+            presetSelect.addEventListener('change', (e) => {
+                const val = e.target.value;
+                if (val) {
+                    textInput.value = val;
+                    this.translateCustomText();
+                    e.target.value = '';
+                }
+            });
+        }
+
+        if (micBtn) {
+            micBtn.addEventListener('click', () => this.toggleMicRecord());
+        }
+    }
+
+    async uploadMP4Video(file) {
+        const formData = new FormData();
+        formData.append('file', file);
+
+        const videoPlayer = document.getElementById('mp4-video');
+        const placeholder = document.getElementById('video-placeholder');
+
+        if (placeholder) placeholder.style.display = 'none';
+        if (videoPlayer) {
+            videoPlayer.style.display = 'block';
+            videoPlayer.src = URL.createObjectURL(file);
+        }
+
+        this._updateCaption("Processing MP4 video & audio stream...", []);
+
+        try {
+            const res = await fetch('/api/video/process', {
+                method: 'POST',
+                body: formData
+            });
+
+            const data = await res.json();
+            if (data.status === 'success') {
+                this.timeline = data.timeline || [];
+                this.isVideoLoaded = true;
+                this.activeSegmentIndex = -1;
+
+                this._updateCaption(
+                    data.full_english_text || "MP4 video ready for playback",
+                    ["READY", "SYNCED"]
+                );
+
+                if (videoPlayer) {
+                    videoPlayer.play();
+                    const playBtn = document.getElementById('btn-play-pause');
+                    if (playBtn) playBtn.textContent = '⏸ Pause';
+                }
+            } else {
+                alert("Video processing failed: " + (data.detail || "Unknown error"));
             }
+        } catch (err) {
+            console.error("Upload error:", err);
+            this._updateCaption("Error processing video file.", ["ERROR"]);
+        }
+    }
+
+    async translateCustomText() {
+        const textInput = document.getElementById('text-input');
+        const text = textInput ? textInput.value.trim() : '';
+        if (!text) return;
+
+        this._updateCaption(text, ["TRANSLATING..."]);
+
+        try {
+            const res = await fetch('/translate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text })
+            });
+
+            const data = await res.json();
+            const tokens = data.tokens || (data.gloss ? data.gloss.split(' ') : []);
+            this._updateCaption(data.english, tokens);
+
+            // Play multi-sign 3D animation sequence
+            if (this.avatarRenderer && tokens.length > 0) {
+                this.avatarRenderer.playSignSequence(tokens, (activeSign) => {
+                    this._setSigningBadge(activeSign);
+                    this._highlightActiveGlossChip(activeSign);
+                });
+            }
+        } catch (err) {
+            console.error("Translation error:", err);
+            this._updateCaption(text, ["SERVER-ERROR"]);
+        }
+    }
+
+    _syncTimelineWithTime(currentTime) {
+        if (!this.timeline || this.timeline.length === 0) return;
+
+        for (let i = 0; i < this.timeline.length; i++) {
+            const seg = this.timeline[i];
+            if (currentTime >= seg.start && currentTime <= seg.end) {
+                if (this.activeSegmentIndex !== i) {
+                    this.activeSegmentIndex = i;
+                    const tokens = seg.tokens || (seg.gloss ? seg.gloss.split(' ') : []);
+                    this._updateCaption(seg.text, tokens, i);
+
+                    if (this.avatarRenderer && tokens.length > 0) {
+                        this.avatarRenderer.playSignSequence(tokens, (activeSign) => {
+                            this._setSigningBadge(activeSign);
+                            this._highlightActiveGlossChip(activeSign);
+                        });
+                    }
+                }
+                return;
+            }
+        }
+    }
+
+    _setSigningBadge(signName) {
+        const badge = document.getElementById('signing-indicator');
+        if (!badge) return;
+
+        if (signName) {
+            badge.textContent = `✋ Signing: ${signName}`;
+            badge.classList.add('active');
         } else {
-            this.audioRecorder.stop();
-            this.btnRecord.classList.remove('btn-danger');
-            this.btnRecord.classList.add('btn-primary');
-            this.btnRecord.innerHTML = `
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>
-                Speak English
-            `;
+            badge.textContent = `✋ Signing ASL...`;
+            badge.classList.remove('active');
         }
     }
 
-    sendText() {
-        const raw = this.txtInput.value;
-        const text = raw.trim ? raw.trim() : raw;
-        if (text) {
-            this.frameQueue = []; // Clear previous animation queue
-            this.wsClient.sendTextInput(text);
-        }
-    }
+    _highlightActiveGlossChip(activeSign) {
+        const container = document.getElementById('caption-gloss-container');
+        if (!container) return;
 
-    handleTranscript(data) {
-        this.transcriptBox.textContent = data.text || "...";
-        if (data.latency_ms) {
-            this.metricAsr.textContent = `${Math.round(data.latency_ms)}ms`;
-        }
-    }
-
-    handleGloss(data) {
-        this.glossBox.innerHTML = '';
-        const tokens = data.tokens || [];
-        tokens.forEach(token => {
-            const chip = document.createElement('span');
-            chip.className = 'gloss-chip';
-            chip.textContent = token;
-            this.glossBox.appendChild(chip);
+        const chips = container.querySelectorAll('.gloss-chip');
+        chips.forEach(chip => {
+            if (activeSign && chip.textContent.toUpperCase() === activeSign.toUpperCase()) {
+                chip.classList.add('active');
+            } else {
+                chip.classList.remove('active');
+            }
         });
+    }
 
-        if (data.latency_ms) {
-            this.metricGloss.textContent = `${Math.round(data.latency_ms)}ms`;
+    _updateCaption(englishText, glossTokens) {
+        const engBox = document.getElementById('caption-english-text');
+        const glossBox = document.getElementById('caption-gloss-container');
+
+        if (engBox) engBox.textContent = englishText || 'Ready for input...';
+
+        if (glossBox) {
+            glossBox.innerHTML = '';
+            (glossTokens || []).forEach(token => {
+                const chip = document.createElement('span');
+                chip.className = 'gloss-chip';
+                chip.textContent = token;
+                glossBox.appendChild(chip);
+            });
         }
     }
 
-    handlePoseFrames(data) {
-        if (data.frames && data.frames.length > 0) {
-            // Push incoming pose keypoint frames into playback queue
-            this.frameQueue.push(...data.frames);
-        }
+    _formatTime(seconds) {
+        const m = Math.floor(seconds / 60);
+        const s = Math.floor(seconds % 60);
+        return `${m}:${s < 10 ? '0' : ''}${s}`;
     }
 
-    startAnimationLoop() {
-        let lastFrameTime = performance.now();
-        let frameCount = 0;
-        let fpsTimer = performance.now();
-        let frameDelay = 0;
+    async toggleMicRecord() {
+        const micBtn = document.getElementById('btn-mic-record');
+        if (!this.isRecording) {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                this.mediaRecorder = new MediaRecorder(stream);
+                this.mediaRecorder.start();
+                this.isRecording = true;
+                if (micBtn) micBtn.className = 'btn btn-danger';
 
-        const renderStep = () => {
-            const now = performance.now();
-            const dt = (now - lastFrameTime) / 1000;
-            lastFrameTime = now;
-
-            // Compute FPS
-            frameCount++;
-            if (now - fpsTimer >= 1000) {
-                this.metricFps.textContent = `${frameCount}`;
-                frameCount = 0;
-                fpsTimer = now;
+                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
+                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+                    this.recognition = new SR();
+                    this.recognition.lang = 'en-US';
+                    this.recognition.onresult = (e) => {
+                        const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
+                        const textInput = document.getElementById('text-input');
+                        if (textInput) textInput.value = transcript;
+                        if (e.results[e.results.length - 1].isFinal) {
+                            this.translateCustomText();
+                        }
+                    };
+                    this.recognition.start();
+                }
+            } catch (err) {
+                alert("Microphone access denied or unavailable.");
             }
-
-            // Play pose frames with controlled pacing (~15-20 FPS sign frame rate)
-            frameDelay += dt;
-            if (this.frameQueue.length > 0 && frameDelay >= 0.05) {
-                frameDelay = 0;
-                const rawFrame = this.frameQueue.shift();
-
-                // Pass frame through WASM Animation Engine for SLERP/IK smoothing
-                this.wasmBridge.processFrame(rawFrame, dt);
-
-                // Render smoothed pose frame onto Three.js avatar
-                this.avatarRenderer.applyPoseFrame(rawFrame);
-            }
-
-            requestAnimationFrame(renderStep);
-        };
-
-        requestAnimationFrame(renderStep);
+        } else {
+            this.isRecording = false;
+            if (this.mediaRecorder) this.mediaRecorder.stop();
+            if (this.recognition) this.recognition.stop();
+            if (micBtn) micBtn.className = 'btn btn-primary';
+        }
     }
 }
 
-// Instantiate App when DOM is ready
 window.addEventListener('DOMContentLoaded', () => {
-    window.app = new HearLinkApp();
+    window.app = new MP4ToASLApp();
 });

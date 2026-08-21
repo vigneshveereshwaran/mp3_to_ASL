@@ -3,438 +3,163 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HearLink ASL — Real-time Speech to Sign Language</title>
-    <meta name="description" content="HearLink ASL — Real-time Speech-to-American Sign Language Translation System">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-        :root {
-            --bg: #080b18;
-            --bg2: #0e1225;
-            --card: rgba(14, 20, 45, 0.85);
-            --border: rgba(0, 242, 254, 0.15);
-            --cyan: #00f2fe;
-            --purple: #7f00ff;
-            --text: #e8eaf0;
-            --muted: #7a86a0;
-            --danger: #ff4757;
-            --success: #2ed573;
-            --radius: 12px;
-        }
-
-        body {
-            font-family: 'Inter', sans-serif;
-            background: var(--bg);
-            color: var(--text);
-            height: 100dvh;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
-        }
-
-        /* ── TOP NAV ── */
-        header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            padding: 12px 24px;
-            background: rgba(8, 11, 24, 0.9);
-            border-bottom: 1px solid var(--border);
-            backdrop-filter: blur(12px);
-            z-index: 10;
-            flex-shrink: 0;
-        }
-        .brand { display: flex; align-items: center; gap: 10px; }
-        .brand-icon {
-            width: 32px; height: 32px;
-            background: linear-gradient(135deg, var(--cyan), var(--purple));
-            border-radius: 8px;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 16px;
-        }
-        .brand-name { font-size: 1.1rem; font-weight: 700; letter-spacing: -0.3px; }
-        .brand-name span { color: var(--cyan); }
-        .header-badges { display: flex; gap: 8px; }
-        .badge {
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            border: 1px solid var(--border);
-            background: rgba(0,242,254,0.08);
-            color: var(--cyan);
-        }
-        .badge.purple { background: rgba(127,0,255,0.1); color: #b388ff; border-color: rgba(127,0,255,0.3); }
-        #conn-badge {
-            width: 8px; height: 8px;
-            border-radius: 50%;
-            background: var(--muted);
-            display: inline-block;
-            margin-right: 4px;
-            transition: background 0.3s;
-        }
-        #conn-badge.online { background: var(--success); box-shadow: 0 0 8px var(--success); }
-
-        /* ── LAYOUT ── */
-        .app-layout {
-            display: grid;
-            grid-template-columns: 1fr 360px;
-            flex: 1;
-            overflow: hidden;
-        }
-
-        /* ── 3D VIEWPORT ── */
-        #viewport {
-            position: relative;
-            overflow: hidden;
-            background: radial-gradient(ellipse at center, #0d1535 0%, var(--bg) 70%);
-        }
-        #three-canvas { display: block; width: 100%; height: 100%; }
-
-        .viewport-label {
-            position: absolute;
-            top: 16px; left: 16px;
-            display: flex; flex-direction: column; gap: 6px;
-        }
-        .viewport-label span {
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 0.72rem;
-            font-weight: 600;
-            border: 1px solid var(--border);
-            background: rgba(0,0,0,0.5);
-            color: var(--muted);
-            backdrop-filter: blur(8px);
-        }
-
-        .signing-status {
-            position: absolute;
-            bottom: 20px; left: 50%;
-            transform: translateX(-50%);
-            padding: 8px 20px;
-            border-radius: 24px;
-            background: rgba(0,0,0,0.6);
-            border: 1px solid var(--border);
-            font-size: 0.82rem;
-            font-weight: 600;
-            color: var(--cyan);
-            backdrop-filter: blur(8px);
-            opacity: 0;
-            transition: opacity 0.3s;
-        }
-        .signing-status.visible { opacity: 1; }
-
-        /* ── SIDEBAR ── */
-        #sidebar {
-            background: var(--bg2);
-            border-left: 1px solid var(--border);
-            overflow-y: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 2px;
-            padding: 12px;
-            scrollbar-width: thin;
-            scrollbar-color: var(--border) transparent;
-        }
-
-        .panel-card {
-            background: var(--card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 14px;
-            backdrop-filter: blur(8px);
-        }
-
-        .card-title {
-            font-size: 0.75rem;
-            font-weight: 700;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            color: var(--muted);
-            margin-bottom: 10px;
-            display: flex;
-            align-items: center;
-            gap: 6px;
-        }
-        .card-title::before {
-            content: '';
-            display: inline-block;
-            width: 3px; height: 12px;
-            background: var(--cyan);
-            border-radius: 2px;
-        }
-
-        /* Buttons */
-        .btn {
-            width: 100%;
-            padding: 10px 16px;
-            border-radius: 8px;
-            border: none;
-            font-family: 'Inter', sans-serif;
-            font-size: 0.88rem;
-            font-weight: 600;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            gap: 8px;
-            transition: all 0.2s;
-        }
-        .btn:active { transform: scale(0.97); }
-        .btn-primary {
-            background: linear-gradient(135deg, var(--cyan), #4facfe);
-            color: #000;
-        }
-        .btn-primary:hover { opacity: 0.9; box-shadow: 0 0 20px rgba(0,242,254,0.35); }
-        .btn-danger {
-            background: linear-gradient(135deg, var(--danger), #ff6b81);
-            color: #fff;
-            animation: pulse-danger 1.5s infinite;
-        }
-        @keyframes pulse-danger {
-            0%, 100% { box-shadow: 0 0 0 0 rgba(255,71,87,0.4); }
-            50% { box-shadow: 0 0 0 8px rgba(255,71,87,0); }
-        }
-        .btn-secondary {
-            background: rgba(0,242,254,0.1);
-            border: 1px solid var(--border);
-            color: var(--cyan);
-        }
-        .btn-secondary:hover { background: rgba(0,242,254,0.2); }
-
-        /* Input */
-        .input-row { display: flex; gap: 8px; margin-top: 8px; }
-        input[type="text"] {
-            flex: 1;
-            background: rgba(0,0,0,0.4);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 9px 12px;
-            color: var(--text);
-            font-family: 'Inter', sans-serif;
-            font-size: 0.85rem;
-            outline: none;
-            transition: border-color 0.2s;
-        }
-        input[type="text"]:focus { border-color: var(--cyan); }
-
-        select {
-            width: 100%;
-            background: rgba(0,0,0,0.4);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 9px 12px;
-            color: var(--text);
-            font-family: 'Inter', sans-serif;
-            font-size: 0.85rem;
-            outline: none;
-            cursor: pointer;
-            margin-top: 4px;
-        }
-
-        /* Display boxes */
-        .display-box {
-            background: rgba(0,0,0,0.3);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 10px 12px;
-            font-size: 0.85rem;
-            color: var(--muted);
-            min-height: 40px;
-            line-height: 1.5;
-            margin-top: 8px;
-            word-break: break-word;
-        }
-        .display-box.active { color: var(--text); border-color: rgba(0,242,254,0.3); }
-
-        /* Gloss chips */
-        #gloss-box { display: flex; flex-wrap: wrap; gap: 6px; min-height: 40px; margin-top: 8px; }
-        .gloss-chip {
-            padding: 4px 10px;
-            background: rgba(0,242,254,0.1);
-            border: 1px solid rgba(0,242,254,0.3);
-            border-radius: 20px;
-            font-size: 0.78rem;
-            font-weight: 700;
-            color: var(--cyan);
-            letter-spacing: 0.5px;
-        }
-
-        /* Metrics */
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-top: 8px;
-        }
-        .metric-item {
-            background: rgba(0,0,0,0.3);
-            border: 1px solid var(--border);
-            border-radius: 8px;
-            padding: 8px 10px;
-            text-align: center;
-        }
-        .metric-label { font-size: 0.68rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .metric-val { font-size: 1.1rem; font-weight: 700; color: var(--cyan); margin-top: 2px; }
-
-        /* Loading overlay */
-        #loading-overlay {
-            position: fixed; inset: 0;
-            background: var(--bg);
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            gap: 16px;
-            z-index: 999;
-            transition: opacity 0.5s;
-        }
-        #loading-overlay.hidden { opacity: 0; pointer-events: none; }
-        .spinner {
-            width: 48px; height: 48px;
-            border: 3px solid var(--border);
-            border-top-color: var(--cyan);
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading-text { color: var(--muted); font-size: 0.9rem; }
-
-        /* Recording indicator */
-        #rec-dot {
-            width: 10px; height: 10px;
-            background: var(--danger);
-            border-radius: 50%;
-            animation: blink 1s infinite;
-            display: none;
-        }
-        #rec-dot.visible { display: inline-block; }
-        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0; } }
-    </style>
+    <title>MP4-to-ASL — Real-Time Video to Sign Language Translation</title>
+    <meta name="description" content="MP4-to-ASL Real-Time Translation System: Video Ingestion, Speech-to-Text, ASL Gloss Grammar, 3D WebGL Avatar Rendering">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/style.css">
 </head>
 <body>
 
-<!-- Loading overlay -->
+<!-- Loading Overlay -->
 <div id="loading-overlay">
     <div class="spinner"></div>
-    <div class="loading-text">Initializing HearLink ASL...</div>
+    <div style="color: #7a86a0; font-size: 0.9rem; font-weight: 500;">Initializing MP4-to-ASL Translation System...</div>
 </div>
 
-<!-- Header -->
+<!-- Header Navigation -->
 <header>
     <div class="brand">
-        <div class="brand-icon">🤟</div>
-        <div class="brand-name">Hear<span>Link</span> ASL</div>
+        <div class="brand-logo">🤟</div>
+        <div class="brand-title">MP4-to-<span>ASL</span> Translator</div>
     </div>
     <div class="header-badges">
-        <span class="badge"><span id="conn-badge"></span>Backend</span>
-        <span class="badge purple">3D Avatar</span>
-        <span class="badge">Real-time ASL</span>
+        <span class="badge"><span id="backend-status-dot" class="status-dot"></span><span id="backend-type-label">Backend Loading</span></span>
+        <span class="badge purple">WebGL 3D Avatar</span>
+        <span class="badge">60 FPS Slerp Engine</span>
     </div>
 </header>
 
-<!-- Main Layout -->
-<div class="app-layout">
+<!-- App Split Container -->
+<div class="app-container">
+    
+    <div class="viewport-split">
 
-    <!-- 3D Viewport -->
-    <div id="viewport">
-        <canvas id="three-canvas"></canvas>
-        <div class="viewport-label">
-            <span>🖱️ Drag to rotate</span>
-            <span>🔍 Scroll to zoom</span>
-        </div>
-        <div id="signing-status" class="signing-status">✋ Signing...</div>
-    </div>
+        <!-- Left Viewport: MP4 Video Player -->
+        <div class="viewport-card">
+            <div class="viewport-header">
+                <span>📹 MP4 VIDEO STREAM</span>
+                <label for="video-file-input" style="cursor: pointer; color: var(--accent-cyan);">📁 Open MP4 File</label>
+                <input type="file" id="video-file-input" accept="video/mp4,video/webm,video/mov,video/avi" style="display: none;">
+            </div>
 
-    <!-- Sidebar -->
-    <div id="sidebar">
+            <div class="video-container">
+                <video id="mp4-video" playsinline style="display: none;"></video>
+                
+                <div id="video-placeholder" class="video-placeholder">
+                    <label for="video-file-input" class="upload-dropzone">
+                        <div style="font-size: 2.2rem; margin-bottom: 8px;">🎥</div>
+                        <div style="font-weight: 700; color: #e8eaf0; margin-bottom: 4px;">Upload MP4 Video File</div>
+                        <div style="font-size: 0.8rem; color: #7a86a0;">Drag & drop or click to upload lecture / clip</div>
+                    </label>
+                </div>
+            </div>
 
-        <!-- Mic Input -->
-        <div class="panel-card">
-            <div class="card-title">🎙️ Voice Input</div>
-            <button id="btn-record" class="btn btn-primary">
-                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
-                <span id="rec-label">Speak English</span>
-                <span id="rec-dot"></span>
-            </button>
-        </div>
-
-        <!-- Preset Phrases -->
-        <div class="panel-card">
-            <div class="card-title">⚡ Preset Demo Phrases</div>
-            <select id="preset-select">
-                <option value="">-- Choose a demo phrase --</option>
-                <option value="Hello, how are you?">Hello, how are you?</option>
-                <option value="Thank you very much">Thank you very much</option>
-                <option value="I want to learn sign language">I want to learn sign language</option>
-                <option value="What is your name?">What is your name?</option>
-                <option value="I am happy today">I am happy today</option>
-                <option value="She does not understand">She does not understand</option>
-                <option value="Yesterday I went to the store">Yesterday I went to the store</option>
-                <option value="Good morning">Good morning</option>
-                <option value="I need help">I need help</option>
-            </select>
-        </div>
-
-        <!-- Text Input -->
-        <div class="panel-card">
-            <div class="card-title">✏️ Custom Text</div>
-            <div class="input-row">
-                <input type="text" id="text-input" placeholder="Type English sentence...">
-                <button id="btn-send" class="btn btn-secondary" style="width:auto; padding: 9px 14px;">Go</button>
+            <!-- Video Playback Controls -->
+            <div class="video-controls">
+                <button id="btn-play-pause">▶ Play</button>
+                <input type="range" id="video-scrubber" class="scrubber-range" min="0" max="100" value="0">
+                <span id="time-display" class="time-display">0:00 / 0:00</span>
             </div>
         </div>
 
-        <!-- Transcript -->
-        <div class="panel-card">
-            <div class="card-title">📝 English Transcript</div>
-            <div id="transcript-box" class="display-box">Select a phrase or speak...</div>
+        <!-- Middle Viewport: 3D WebGL Avatar -->
+        <div class="avatar-viewport">
+            <canvas id="three-canvas"></canvas>
+            <div class="avatar-overlay-info">
+                <span class="overlay-chip">🖱️ Drag to rotate 3D Avatar</span>
+                <span class="overlay-chip">🔍 Scroll to zoom</span>
+            </div>
+            <div id="signing-indicator" class="signing-indicator">✋ Signing ASL...</div>
         </div>
 
-        <!-- Gloss -->
-        <div class="panel-card">
-            <div class="card-title">🤟 ASL Gloss Tokens</div>
-            <div id="gloss-box"><span class="gloss-chip">READY</span></div>
-        </div>
+        <!-- Right Control Sidebar -->
+        <div class="control-sidebar">
 
-        <!-- Metrics -->
-        <div class="panel-card">
-            <div class="card-title">📊 Pipeline Metrics</div>
-            <div class="metrics-grid">
-                <div class="metric-item">
-                    <div class="metric-label">Gloss Latency</div>
-                    <div class="metric-val" id="metric-gloss">—</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">Sign Frames</div>
-                    <div class="metric-val" id="metric-frames">—</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">Render FPS</div>
-                    <div class="metric-val" id="metric-fps">60</div>
-                </div>
-                <div class="metric-item">
-                    <div class="metric-label">Backend</div>
-                    <div class="metric-val" id="metric-backend" style="font-size:0.75rem;">—</div>
+            <!-- Mic Input Card -->
+            <div class="panel-card">
+                <div class="panel-title">🎙️ Speech / Mic Input</div>
+                <button id="btn-mic-record" class="btn btn-primary">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/><path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/></svg>
+                    <span>Speak Live English</span>
+                </button>
+            </div>
+
+            <!-- Preset Demo Phrases -->
+            <div class="panel-card">
+                <div class="panel-title">⚡ Preset Demo Phrases</div>
+                <select id="preset-select">
+                    <option value="">-- Choose a demo sentence --</option>
+                    <option value="Hello, how are you?">Hello, how are you?</option>
+                    <option value="What is your name?">What is your name?</option>
+                    <option value="Thank you very much">Thank you very much</option>
+                    <option value="Yesterday I went to school">Yesterday I went to school</option>
+                    <option value="I love learning sign language">I love learning sign language</option>
+                    <option value="Good morning">Good morning</option>
+                    <option value="I need help">I need help</option>
+                </select>
+            </div>
+
+            <!-- Custom Text Card -->
+            <div class="panel-card">
+                <div class="panel-title">✏️ English Sentence</div>
+                <div class="input-group">
+                    <input type="text" id="text-input" placeholder="Type English text...">
+                    <button id="btn-send-text" class="btn btn-secondary" style="width: auto;">Translate</button>
                 </div>
             </div>
+
+            <!-- Metrics Card -->
+            <div class="panel-card">
+                <div class="panel-title">📊 System Metrics</div>
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <div class="metric-title">Target FPS</div>
+                        <div class="metric-value">60 FPS</div>
+                    </div>
+                    <div class="metric-card">
+                        <div class="metric-title">Interpolation</div>
+                        <div class="metric-value">Bone Slerp</div>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
     </div>
+
+    <!-- Bottom Viewport: Real-Time Synchronized Captions & ASL Gloss Tokens -->
+    <div class="caption-viewport">
+        <div class="caption-box">
+            <div class="caption-label">📝 Synchronized English Speech / Subtitles</div>
+            <div id="caption-english-text" class="caption-text">Upload an MP4 video or select a phrase to begin real-time translation...</div>
+        </div>
+
+        <div class="caption-box">
+            <div class="caption-label">🤟 Active ASL Gloss Tokens</div>
+            <div id="caption-gloss-container" class="gloss-container">
+                <span class="gloss-chip">STANDBY</span>
+            </div>
+        </div>
+    </div>
+
 </div>
 
-<!-- Three.js from CDN -->
+<!-- Three.js CDN -->
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+
+<!-- Inline OrbitControls -->
 <script>
-// ─────────────────────────────────────────────────────────────
-// THREE.JS ORBIT CONTROLS (inline minimal version)
-// ─────────────────────────────────────────────────────────────
 (function() {
     THREE.OrbitControls = function(camera, domElement) {
         this.camera = camera;
         this.domElement = domElement;
         this.enableDamping = true;
         this.dampingFactor = 0.05;
-        let spherical = { theta: 0, phi: Math.PI / 2, radius: 2.5 };
+        let spherical = { theta: 0, phi: Math.PI / 2, radius: 2.6 };
         let target = new THREE.Vector3(0, -0.2, 0);
         let isDragging = false, lastX = 0, lastY = 0;
         let vTheta = 0, vPhi = 0;
@@ -443,21 +168,12 @@
         window.addEventListener('mouseup', () => isDragging = false);
         window.addEventListener('mousemove', e => {
             if (!isDragging) return;
-            const dx = e.clientX - lastX, dy = e.clientY - lastY;
+            vTheta -= (e.clientX - lastX) * 0.008;
+            vPhi -= (e.clientY - lastY) * 0.008;
             lastX = e.clientX; lastY = e.clientY;
-            vTheta -= dx * 0.008;
-            vPhi -= dy * 0.008;
         });
         domElement.addEventListener('wheel', e => {
-            spherical.radius = Math.max(1.2, Math.min(5, spherical.radius + e.deltaY * 0.005));
-        });
-        // Touch support
-        let lastTouchX = 0, lastTouchY = 0;
-        domElement.addEventListener('touchstart', e => { lastTouchX = e.touches[0].clientX; lastTouchY = e.touches[0].clientY; });
-        domElement.addEventListener('touchmove', e => {
-            const dx = e.touches[0].clientX - lastTouchX, dy = e.touches[0].clientY - lastTouchY;
-            lastTouchX = e.touches[0].clientX; lastTouchY = e.touches[0].clientY;
-            vTheta -= dx * 0.01; vPhi -= dy * 0.01;
+            spherical.radius = Math.max(1.2, Math.min(5.0, spherical.radius + e.deltaY * 0.005));
         });
 
         this.update = function() {
@@ -472,475 +188,13 @@
         };
     };
 })();
-
-// ─────────────────────────────────────────────────────────────
-// 3D AVATAR RENDERER
-// ─────────────────────────────────────────────────────────────
-class AvatarScene {
-    constructor(canvas) {
-        this.canvas = canvas;
-        this.frameQueue = [];
-        this.isPlaying = false;
-        this.frameTimer = 0;
-        this.joints = {};
-        this.breathPhase = 0;
-        this._init();
-    }
-
-    _init() {
-        const W = this.canvas.parentElement.clientWidth;
-        const H = this.canvas.parentElement.clientHeight;
-
-        // Renderer
-        this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true });
-        this.renderer.setSize(W, H);
-        this.renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-        this.renderer.shadowMap.enabled = true;
-        this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        this.renderer.toneMappingExposure = 1.1;
-
-        // Scene
-        this.scene = new THREE.Scene();
-        this.scene.background = new THREE.Color(0x080b18);
-        this.scene.fog = new THREE.FogExp2(0x080b18, 0.12);
-
-        // Camera
-        this.camera = new THREE.PerspectiveCamera(42, W / H, 0.01, 100);
-        this.camera.position.set(0, 0.2, 2.5);
-        this.controls = new THREE.OrbitControls(this.camera, this.canvas);
-
-        // Lights
-        this.scene.add(new THREE.AmbientLight(0xffffff, 0.7));
-        const key = new THREE.DirectionalLight(0x00f2fe, 2.5);
-        key.position.set(3, 5, 4); key.castShadow = true;
-        this.scene.add(key);
-        const rim = new THREE.DirectionalLight(0x7f00ff, 2.0);
-        rim.position.set(-3, 2, -3);
-        this.scene.add(rim);
-        const fill = new THREE.PointLight(0x4facfe, 1.5, 8);
-        fill.position.set(0, 0, 2.5);
-        this.scene.add(fill);
-
-        // Grid
-        const grid = new THREE.GridHelper(12, 40, 0x00f2fe, 0x111827);
-        grid.position.y = -1.15;
-        this.scene.add(grid);
-
-        // Build avatar
-        this._buildAvatar();
-
-        // Window resize
-        window.addEventListener('resize', () => {
-            const w = this.canvas.parentElement.clientWidth;
-            const h = this.canvas.parentElement.clientHeight;
-            this.camera.aspect = w / h;
-            this.camera.updateProjectionMatrix();
-            this.renderer.setSize(w, h);
-        });
-
-        // Animate
-        this._animate();
-    }
-
-    _mat(color, emissive = 0x000000, emissiveIntensity = 0, metalness = 0.7, roughness = 0.3) {
-        return new THREE.MeshStandardMaterial({ color, emissive, emissiveIntensity, metalness, roughness });
-    }
-
-    _buildAvatar() {
-        this.avatar = new THREE.Group();
-
-        const bodyMat  = this._mat(0x1a2540, 0x050d1e, 0.2, 0.75, 0.25);
-        const cyanMat  = this._mat(0x00c8d4, 0x004455, 0.8, 0.9, 0.1);
-        const purpMat  = this._mat(0x6a00d4, 0x2a0055, 0.6, 0.85, 0.15);
-        const handMat  = this._mat(0x7f00ff, 0x3a0077, 0.7, 0.8, 0.2);
-        const eyeMat   = new THREE.MeshBasicMaterial({ color: 0x00f2fe });
-        const glowMat  = new THREE.MeshBasicMaterial({ color: 0x00f2fe, transparent: true, opacity: 0.3 });
-
-        // ── HEAD ──
-        const headPivot = new THREE.Group();
-        headPivot.position.set(0, 0.48, 0);
-        const headGeo = new THREE.SphereGeometry(0.13, 32, 24);
-        headGeo.scale(1, 1.18, 0.95);
-        const head = new THREE.Mesh(headGeo, bodyMat);
-        head.castShadow = true;
-        headPivot.add(head);
-        // Visor
-        const visorGeo = new THREE.BoxGeometry(0.16, 0.032, 0.04);
-        const visor = new THREE.Mesh(visorGeo, eyeMat);
-        visor.position.set(0, 0.025, 0.12);
-        headPivot.add(visor);
-        // Glow ring
-        const glowRing = new THREE.Mesh(new THREE.TorusGeometry(0.14, 0.006, 8, 32), glowMat);
-        glowRing.rotation.x = Math.PI / 2;
-        glowRing.position.y = -0.05;
-        headPivot.add(glowRing);
-        this.avatar.add(headPivot);
-        this.joints.head = headPivot;
-
-        // ── NECK ──
-        const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.048, 0.058, 0.07, 16), bodyMat);
-        neck.position.set(0, 0.30, 0);
-        this.avatar.add(neck);
-
-        // ── TORSO ──
-        const torsoPivot = new THREE.Group();
-        torsoPivot.position.set(0, -0.28, 0);
-        const chest = new THREE.Mesh(new THREE.CylinderGeometry(0.19, 0.14, 0.38, 20), bodyMat);
-        chest.castShadow = true;
-        torsoPivot.add(chest);
-        // Chest glow strip
-        const strip = new THREE.Mesh(new THREE.BoxGeometry(0.035, 0.30, 0.015), cyanMat);
-        strip.position.set(0, 0.04, 0.175);
-        torsoPivot.add(strip);
-        // Shoulder pads
-        [-0.21, 0.21].forEach(x => {
-            const pad = new THREE.Mesh(new THREE.SphereGeometry(0.065, 16, 12), cyanMat);
-            pad.position.set(x, 0.23, 0);
-            torsoPivot.add(pad);
-        });
-        this.avatar.add(torsoPivot);
-        this.joints.torso = torsoPivot;
-
-        // ── ARMS ──
-        this._buildArm(true,  cyanMat, handMat);  // Right
-        this._buildArm(false, cyanMat, handMat);  // Left
-
-        // ── LOWER BODY ──
-        const waist = new THREE.Mesh(new THREE.CylinderGeometry(0.13, 0.115, 0.1, 16), purpMat);
-        waist.position.set(0, -0.73, 0);
-        this.avatar.add(waist);
-        [-0.07, 0.07].forEach(x => {
-            const thigh = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.055, 0.28, 14), bodyMat);
-            thigh.position.set(x, -0.98, 0);
-            this.avatar.add(thigh);
-            const shin = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.038, 0.27, 14), bodyMat);
-            shin.position.set(x, -1.27, 0.02);
-            this.avatar.add(shin);
-            const foot = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.04, 0.12), cyanMat);
-            foot.position.set(x, -1.41, 0.04);
-            this.avatar.add(foot);
-        });
-
-        // Platform/base
-        const base = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.22, 0.04, 32), cyanMat);
-        base.position.set(0, -1.44, 0);
-        this.avatar.add(base);
-
-        this.scene.add(this.avatar);
-    }
-
-    _buildArm(isRight, armMat, handMat) {
-        const side = isRight ? 1 : -1;
-        const prefix = isRight ? 'r' : 'l';
-
-        // Shoulder joint (pivot)
-        const shoulderPivot = new THREE.Group();
-        shoulderPivot.position.set(side * 0.21, 0.0, 0);
-        this.avatar.add(shoulderPivot);
-        this.joints[prefix + 'Shoulder'] = shoulderPivot;
-
-        // Upper arm
-        const upperArm = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.042, 0.036, 0.24, 14),
-            armMat
-        );
-        upperArm.position.set(0, -0.12, 0);
-        upperArm.castShadow = true;
-        shoulderPivot.add(upperArm);
-
-        // Elbow pivot
-        const elbowPivot = new THREE.Group();
-        elbowPivot.position.set(0, -0.24, 0);
-        shoulderPivot.add(elbowPivot);
-        this.joints[prefix + 'Elbow'] = elbowPivot;
-
-        // Lower arm
-        const lowerArm = new THREE.Mesh(
-            new THREE.CylinderGeometry(0.036, 0.03, 0.22, 14),
-            armMat
-        );
-        lowerArm.position.set(0, -0.11, 0);
-        lowerArm.castShadow = true;
-        elbowPivot.add(lowerArm);
-
-        // Wrist pivot
-        const wristPivot = new THREE.Group();
-        wristPivot.position.set(0, -0.22, 0);
-        elbowPivot.add(wristPivot);
-        this.joints[prefix + 'Wrist'] = wristPivot;
-
-        // Hand
-        const palm = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.085, 0.03), handMat);
-        palm.position.set(0, -0.045, 0);
-        palm.castShadow = true;
-        wristPivot.add(palm);
-
-        // 4 finger stubs
-        const fingerMat = new THREE.MeshStandardMaterial({ color: 0x9a40ff, emissive: 0x3a0077, emissiveIntensity: 0.5, metalness: 0.8, roughness: 0.2 });
-        for (let i = 0; i < 4; i++) {
-            const finger = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.007, 0.06, 8), fingerMat);
-            finger.position.set((i - 1.5) * 0.018, -0.1, 0);
-            wristPivot.add(finger);
-        }
-        // Thumb
-        const thumb = new THREE.Mesh(new THREE.CylinderGeometry(0.009, 0.008, 0.05, 8), fingerMat);
-        thumb.rotation.z = side * 0.9;
-        thumb.position.set(side * 0.045, -0.04, 0.005);
-        wristPivot.add(thumb);
-
-        // Default idle pose
-        if (isRight) {
-            shoulderPivot.rotation.z = -0.25;
-            elbowPivot.rotation.z = 0.3;
-        } else {
-            shoulderPivot.rotation.z = 0.25;
-            elbowPivot.rotation.z = -0.3;
-        }
-    }
-
-    applyPoseFrame(frame) {
-        if (!frame) return;
-        const pose = frame.pose || [];
-        const rh   = frame.right_hand || [];
-        const lh   = frame.left_hand || [];
-
-        // Right arm from pose landmarks 11=rShoulder, 13=rElbow, 15=rWrist
-        if (pose.length > 15) {
-            this._setArmFromLandmarks('r', pose[11], pose[13], pose[15]);
-        }
-        if (pose.length > 16) {
-            this._setArmFromLandmarks('l', pose[12], pose[14], pose[16]);
-        }
-    }
-
-    _setArmFromLandmarks(side, shoulder, elbow, wrist) {
-        const s = side === 'r' ? 1 : -1;
-        if (!shoulder || !elbow || !wrist) return;
-        const sj = this.joints[side + 'Shoulder'];
-        const ej = this.joints[side + 'Elbow'];
-        const wj = this.joints[side + 'Wrist'];
-        if (!sj || !ej) return;
-
-        const scale = 1.2;
-        sj.rotation.z = -s * (shoulder[0] - elbow[0]) * scale;
-        sj.rotation.x = (shoulder[1] - elbow[1]) * scale * 0.5;
-        ej.rotation.x = (elbow[1] - wrist[1]) * scale * 0.8;
-        ej.rotation.z = -s * (elbow[0] - wrist[0]) * scale * 0.5;
-    }
-
-    // Animate a sign by smoothly transitioning between keyframes
-    playSignAnimation(frames) {
-        if (!frames || frames.length === 0) return;
-        this.frameQueue = [...frames];
-        this.isPlaying = true;
-        this.frameTimer = 0;
-    }
-
-    _setIdlePose() {
-        const b = Math.sin(this.breathPhase) * 0.015;
-        if (this.joints.torso) this.joints.torso.position.y = -0.28 + b;
-        if (this.joints.head) this.joints.head.position.y = 0.48 + b * 0.5;
-        // Gentle arm sway
-        if (this.joints.rShoulder) this.joints.rShoulder.rotation.z = -0.25 + Math.sin(this.breathPhase * 0.7) * 0.02;
-        if (this.joints.lShoulder) this.joints.lShoulder.rotation.z =  0.25 - Math.sin(this.breathPhase * 0.7) * 0.02;
-    }
-
-    _animate() {
-        requestAnimationFrame(() => this._animate());
-
-        // FPS tracking
-        this._fpsFrames = (this._fpsFrames || 0) + 1;
-        this._fpsLast = this._fpsLast || performance.now();
-        const now = performance.now();
-        if (now - this._fpsLast >= 1000) {
-            document.getElementById('metric-fps').textContent = this._fpsFrames;
-            this._fpsFrames = 0;
-            this._fpsLast = now;
-        }
-
-        this.breathPhase += 0.025;
-
-        // Play frame queue
-        if (this.isPlaying && this.frameQueue.length > 0) {
-            this.frameTimer += 1;
-            if (this.frameTimer >= 3) { // ~20fps sign frame rate
-                this.frameTimer = 0;
-                const frame = this.frameQueue.shift();
-                this.applyPoseFrame(frame);
-                if (this.frameQueue.length === 0) {
-                    this.isPlaying = false;
-                    // Smoothly return to idle
-                    setTimeout(() => this._smoothReturnToIdle(), 400);
-                    document.getElementById('signing-status').classList.remove('visible');
-                }
-            }
-        } else {
-            this._setIdlePose();
-        }
-
-        this.controls.update();
-        this.renderer.render(this.scene, this.camera);
-    }
-
-    _smoothReturnToIdle() {
-        if (this.joints.rShoulder) { this.joints.rShoulder.rotation.z = -0.25; this.joints.rShoulder.rotation.x = 0; }
-        if (this.joints.lShoulder) { this.joints.lShoulder.rotation.z =  0.25; this.joints.lShoulder.rotation.x = 0; }
-        if (this.joints.rElbow) { this.joints.rElbow.rotation.x = 0; this.joints.rElbow.rotation.z = 0.3; }
-        if (this.joints.lElbow) { this.joints.lElbow.rotation.x = 0; this.joints.lElbow.rotation.z = -0.3; }
-    }
-}
-
-// ─────────────────────────────────────────────────────────────
-// APP CONTROLLER
-// ─────────────────────────────────────────────────────────────
-class HearLinkApp {
-    constructor() {
-        this.avatarScene = null;
-        this.isRecording = false;
-        this.mediaRecorder = null;
-        this.audioChunks = [];
-        this._init();
-    }
-
-    async _init() {
-        // Init 3D scene
-        const canvas = document.getElementById('three-canvas');
-        this.avatarScene = new AvatarScene(canvas);
-
-        // Check backend connectivity
-        this._pingBackend();
-
-        // Wire up buttons
-        document.getElementById('btn-record').addEventListener('click', () => this._toggleRecord());
-        document.getElementById('btn-send').addEventListener('click', () => this._sendText());
-        document.getElementById('text-input').addEventListener('keydown', e => {
-            if (e.key === 'Enter') this._sendText();
-        });
-        document.getElementById('preset-select').addEventListener('change', e => {
-            const val = e.target.value;
-            if (val) {
-                document.getElementById('text-input').value = val;
-                this._sendText();
-                e.target.value = '';
-            }
-        });
-
-        // Hide loading
-        setTimeout(() => {
-            document.getElementById('loading-overlay').classList.add('hidden');
-        }, 800);
-    }
-
-    async _pingBackend() {
-        try {
-            const res = await fetch('/health');
-            const data = await res.json();
-            document.getElementById('conn-badge').classList.add('online');
-            document.getElementById('metric-backend').textContent =
-                data.neural_translator ? 'Neural' : 'Rule';
-        } catch {
-            document.getElementById('metric-backend').textContent = 'Offline';
-        }
-    }
-
-    async _sendText() {
-        const input = document.getElementById('text-input');
-        const text = input.value.trim();
-        if (!text) return;
-
-        document.getElementById('transcript-box').textContent = text;
-        document.getElementById('transcript-box').classList.add('active');
-        document.getElementById('gloss-box').innerHTML = '<span class="gloss-chip" style="opacity:0.5">Translating...</span>';
-
-        const t0 = performance.now();
-        try {
-            const res = await fetch('/translate', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ text })
-            });
-            const data = await res.json();
-            const latency = Math.round(performance.now() - t0);
-
-            // Show gloss
-            const glossBox = document.getElementById('gloss-box');
-            glossBox.innerHTML = '';
-            (data.tokens || [data.gloss]).forEach(token => {
-                if (!token) return;
-                const chip = document.createElement('span');
-                chip.className = 'gloss-chip';
-                chip.textContent = token;
-                glossBox.appendChild(chip);
-            });
-
-            // Metrics
-            document.getElementById('metric-gloss').textContent = latency + 'ms';
-            document.getElementById('metric-frames').textContent = data.frame_count || 0;
-
-            // Animate avatar
-            if (data.frames && data.frames.length > 0) {
-                document.getElementById('signing-status').classList.add('visible');
-                this.avatarScene.playSignAnimation(data.frames);
-            }
-        } catch (err) {
-            document.getElementById('gloss-box').innerHTML = '<span class="gloss-chip" style="background:rgba(255,71,87,0.2);color:#ff4757;border-color:#ff4757">Server Error</span>';
-        }
-    }
-
-    async _toggleRecord() {
-        if (!this.isRecording) {
-            try {
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                this.audioChunks = [];
-                this.mediaRecorder = new MediaRecorder(stream);
-                this.mediaRecorder.ondataavailable = e => this.audioChunks.push(e.data);
-                this.mediaRecorder.onstop = async () => {
-                    stream.getTracks().forEach(t => t.stop());
-                    const blob = new Blob(this.audioChunks, { type: 'audio/webm' });
-                    // Transcription via SpeechRecognition API (browser-native)
-                };
-                this.mediaRecorder.start();
-                this.isRecording = true;
-
-                // Also start Web Speech API for live transcript
-                if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-                    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-                    this.recognition = new SR();
-                    this.recognition.lang = 'en-US';
-                    this.recognition.interimResults = true;
-                    this.recognition.onresult = e => {
-                        const transcript = Array.from(e.results).map(r => r[0].transcript).join('');
-                        document.getElementById('text-input').value = transcript;
-                        document.getElementById('transcript-box').textContent = transcript;
-                        if (e.results[e.results.length-1].isFinal) {
-                            this._sendText();
-                        }
-                    };
-                    this.recognition.start();
-                }
-
-                // Update button UI
-                document.getElementById('btn-record').className = 'btn btn-danger';
-                document.getElementById('rec-label').textContent = 'Stop Recording';
-                document.getElementById('rec-dot').classList.add('visible');
-            } catch {
-                alert('Microphone access denied. Please allow mic access and try again.');
-            }
-        } else {
-            this.isRecording = false;
-            if (this.mediaRecorder) this.mediaRecorder.stop();
-            if (this.recognition) this.recognition.stop();
-            document.getElementById('btn-record').className = 'btn btn-primary';
-            document.getElementById('rec-label').textContent = 'Speak English';
-            document.getElementById('rec-dot').classList.remove('visible');
-        }
-    }
-}
-
-// Boot
-window.addEventListener('DOMContentLoaded', () => {
-    window.hearlink = new HearLinkApp();
-});
 </script>
+
+<!-- App Scripts -->
+<script src="/static/js/wasm_bridge.js"></script>
+<script src="/static/js/animation_controller.js"></script>
+<script src="/static/js/avatar_renderer.js"></script>
+<script src="/static/js/app.js"></script>
+
 </body>
 </html>

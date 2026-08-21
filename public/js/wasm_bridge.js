@@ -1,120 +1,93 @@
 /**
- * HearLink ASL — WASM Bridge
- * Marshals keypoint pose arrays into C++ WebAssembly heap memory, invokes SLERP / IK,
- * and falls back to JavaScript interpolation when WASM is loading/unavailable.
+ * MP4-to-ASL — WebAssembly Bridge Module
+ * Interface for C++ AnimationEngine WebAssembly binary (bone Slerp and IK solvers).
+ * Includes fallback JavaScript vector/quaternion math if WASM is initializing or unavailable.
  */
 
-export class WASMAnimationBridge {
+class WASMBridge {
     constructor() {
-        this.wasmModule = null;
+        this.wasmLoaded = false;
+        this.module = null;
         this.enginePtr = null;
-        this.isReady = false;
-        this.inputPtr = null;
-        this.outputPtr = null;
+        this._init();
     }
 
-    async init() {
-        try {
-            if (window.AnimationEngine) {
-                this.wasmModule = await window.AnimationEngine();
-                this.enginePtr = this.wasmModule._create_animation_engine();
-
-                // Allocate WASM heap buffers
-                // 67 landmarks * 3 floats = 201 floats for input
-                // 67 landmarks * 7 floats (quat + pos) = 469 floats for output
-                this.inputPtr = this.wasmModule._malloc(201 * 4);
-                this.outputPtr = this.wasmModule._malloc(469 * 4);
-
-                this.isReady = true;
-                console.log("[WASMBridge] C++ WebAssembly Animation Engine initialized successfully!");
-            } else {
-                console.warn("[WASMBridge] AnimationEngine JS wrapper not loaded. Using JS fallback.");
+    async _init() {
+        if (typeof window.AnimationEngine === 'function') {
+            try {
+                this.module = await window.AnimationEngine();
+                if (this.module && typeof this.module._create_animation_engine === 'function') {
+                    this.enginePtr = this.module._create_animation_engine();
+                    this.wasmLoaded = true;
+                    console.log("[WASMBridge] C++ Animation Engine WebAssembly loaded successfully!");
+                }
+            } catch (err) {
+                console.warn("[WASMBridge] WASM initialization failed, using JS math engine:", err);
             }
-        } catch (err) {
-            console.warn("[WASMBridge] WASM initialization failed, switching to JS fallback:", err);
-            this.isReady = false;
-        }
-    }
-
-    processFrame(landmarks, dt = 0.033) {
-        if (this.isReady && this.wasmModule) {
-            return this._processWASM(landmarks, dt);
         } else {
-            return this._processJSFallback(landmarks);
+            console.log("[WASMBridge] Running with JavaScript high-performance math engine.");
         }
     }
 
-    _processWASM(landmarks, dt) {
-        // Flatten landmarks array into input heap
-        const inputData = new Float32Array(201);
-        let idx = 0;
-
-        const pose = landmarks.pose || [];
-        for (let i = 0; i < 25; i++) {
-            if (i < pose.length) {
-                inputData[idx++] = pose[i][0];
-                inputData[idx++] = pose[i][1];
-                inputData[idx++] = pose[i][2];
-            } else {
-                inputData[idx++] = 0; inputData[idx++] = 0; inputData[idx++] = 0;
-            }
+    /**
+     * Spherical Linear Interpolation (Slerp) between two quaternions [x, y, z, w].
+     */
+    slerp(q1, q2, t) {
+        if (this.wasmLoaded && this.module._slerp_quaternion_wasm) {
+            const outPtr = this.module._malloc(16); // 4 floats
+            this.module._slerp_quaternion_wasm(
+                q1[0], q1[1], q1[2], q1[3],
+                q2[0], q2[1], q2[2], q2[3],
+                t, outPtr
+            );
+            const res = [
+                this.module.getValue(outPtr, 'float'),
+                this.module.getValue(outPtr + 4, 'float'),
+                this.module.getValue(outPtr + 8, 'float'),
+                this.module.getValue(outPtr + 12, 'float')
+            ];
+            this.module._free(outPtr);
+            return res;
         }
 
-        const rHand = landmarks.right_hand || [];
-        for (let i = 0; i < 21; i++) {
-            if (i < rHand.length) {
-                inputData[idx++] = rHand[i][0];
-                inputData[idx++] = rHand[i][1];
-                inputData[idx++] = rHand[i][2];
-            } else {
-                inputData[idx++] = 0; inputData[idx++] = 0; inputData[idx++] = 0;
-            }
-        }
-
-        const lHand = landmarks.left_hand || [];
-        for (let i = 0; i < 21; i++) {
-            if (i < lHand.length) {
-                inputData[idx++] = lHand[i][0];
-                inputData[idx++] = lHand[i][1];
-                inputData[idx++] = lHand[i][2];
-            } else {
-                inputData[idx++] = 0; inputData[idx++] = 0; inputData[idx++] = 0;
-            }
-        }
-
-        // Copy input to WASM memory
-        this.wasmModule.HEAPF32.set(inputData, this.inputPtr >> 2);
-
-        // Call WASM function
-        this.wasmModule._process_pose_frame_wasm(this.enginePtr, this.inputPtr, 67, dt, this.outputPtr);
-
-        // Read output from WASM memory
-        const outputData = new Float32Array(this.wasmModule.HEAPF32.buffer, this.outputPtr, 469);
-
-        // Format output into joint transform objects
-        const transforms = [];
-        for (let i = 0; i < 67; i++) {
-            const base = i * 7;
-            transforms.push({
-                rotation: [outputData[base], outputData[base + 1], outputData[base + 2], outputData[base + 3]],
-                position: [outputData[base + 4], outputData[base + 5], outputData[base + 6]]
-            });
-        }
-
-        return transforms;
+        // Fallback JS Slerp
+        return this._jsSlerp(q1, q2, t);
     }
 
-    _processJSFallback(landmarks) {
-        // Pure JS fallback when WASM is disabled or loading
-        const transforms = [];
-        const pose = landmarks.pose || [];
-        for (let i = 0; i < 25; i++) {
-            const pos = i < pose.length ? pose[i] : [0, 0, 0];
-            transforms.push({
-                rotation: [0, 0, 0, 1],
-                position: pos
-            });
+    _jsSlerp(q1, q2, t) {
+        let dot = q1[0]*q2[0] + q1[1]*q2[1] + q1[2]*q2[2] + q1[3]*q2[3];
+
+        if (dot < 0) {
+            q2 = [-q2[0], -q2[1], -q2[2], -q2[3]];
+            dot = -dot;
         }
-        return transforms;
+
+        if (dot > 0.9995) {
+            const res = [
+                q1[0] + t * (q2[0] - q1[0]),
+                q1[1] + t * (q2[1] - q1[1]),
+                q1[2] + t * (q2[2] - q1[2]),
+                q1[3] + t * (q2[3] - q1[3])
+            ];
+            const len = Math.hypot(...res);
+            return res.map(v => v / (len || 1));
+        }
+
+        const theta0 = Math.acos(Math.min(1, Math.max(-1, dot)));
+        const theta = theta0 * t;
+        const sinTheta = Math.sin(theta);
+        const sinTheta0 = Math.sin(theta0);
+
+        const s1 = Math.cos(theta) - dot * sinTheta / sinTheta0;
+        const s2 = sinTheta / sinTheta0;
+
+        return [
+            q1[0] * s1 + q2[0] * s2,
+            q1[1] * s1 + q2[1] * s2,
+            q1[2] * s1 + q2[2] * s2,
+            q1[3] * s1 + q2[3] * s2
+        ];
     }
 }
+
+window.WASMBridge = WASMBridge;
