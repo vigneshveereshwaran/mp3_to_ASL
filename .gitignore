@@ -1,0 +1,53 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+venv/
+.venv/
+env/
+
+# Data & Models (large files)
+datasets/data/
+app/models/
+pose_library/signs/
+*.npy
+*.npz
+
+# WASM build outputs (regenerated via build_wasm)
+public/wasm/*.wasm
+public/wasm/*.js
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Training artifacts
+training/checkpoints/
+training/runs/
+training/wandb/
+*.pt
+*.bin
+*.safetensors
+
+# Logs
+*.log
+logs/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Emscripten cache
+.emscripten_cache/

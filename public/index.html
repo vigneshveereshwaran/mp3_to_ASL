@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="HearLink ASL — Real-time Speech-to-American Sign Language Translation System">
+    <title>HearLink ASL — Real-time Speech to Sign Language</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+
+    <!-- WASM Module Glue Script -->
+    <script src="/static/wasm/animation_engine.js" onerror="console.warn('WASM JS script not pre-compiled, fallback active')"></script>
+</head>
+<body>
+    <div id="app-container">
+        <!-- 3D Avatar Viewport -->
+        <main id="viewport-container">
+            <div class="viewport-overlay">
+                <span class="brand-title">HearLink ASL</span>
+                <span class="badge">3D Avatar Kinematics</span>
+                <span class="badge" style="background: rgba(127, 0, 255, 0.2); color: #b388ff; border-color: rgba(127, 0, 255, 0.4);">Drag mouse to rotate 3D view</span>
+            </div>
+        </main>
+
+        <!-- Sidebar Control Panel -->
+        <aside id="sidebar">
+            <!-- Audio / Mic Section -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <span>Voice / Microphone Input</span>
+                    <span id="status-indicator" class="status-indicator"></span>
+                </div>
+                <div class="controls-group">
+                    <button id="btn-record" class="btn btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/></svg>
+                        Speak English
+                    </button>
+                </div>
+            </section>
+
+            <!-- Preset Samples Section -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <span>Preset Demo Phrases</span>
+                </div>
+                <div class="input-box" style="flex-direction: column; gap: 8px;">
+                    <select id="preset-select" style="background: rgba(0, 0, 0, 0.4); border: 1px solid var(--bg-card-border); padding: 10px; border-radius: var(--radius-md); color: var(--text-main); font-size: 0.88rem; outline: none; width: 100%;">
+                        <option value="">-- Choose a sample sign sentence --</option>
+                        <option value="Hello, how are you?">Hello, how are you?</option>
+                        <option value="Thank you very much">Thank you very much</option>
+                        <option value="I want to learn sign language">I want to learn sign language</option>
+                        <option value="What is your name?">What is your name?</option>
+                        <option value="I am happy today">I am happy today</option>
+                        <option value="She does not understand">She does not understand</option>
+                        <option value="Yesterday I went to the store">Yesterday I went to the store</option>
+                        <option value="FS-A FS-B FS-C FS-D">Fingerspell A B C D</option>
+                    </select>
+                </div>
+            </section>
+
+            <!-- Custom Text Input Section -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <span>Custom Text Input</span>
+                </div>
+                <div class="input-box">
+                    <input type="text" id="text-input" placeholder="Type sentence (e.g. Hello, how are you?)...">
+                    <button id="btn-send" class="btn btn-secondary">Translate</button>
+                </div>
+            </section>
+
+            <!-- English Speech Transcript -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <span>English Transcript</span>
+                </div>
+                <div id="transcript-box" class="display-card">
+                    Select a preset phrase above or click "Speak English"...
+                </div>
+            </section>
+
+            <!-- ASL Gloss Token Output -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <span>ASL Gloss Translation</span>
+                </div>
+                <div id="gloss-box" class="display-card">
+                    <span class="gloss-chip">READY</span>
+                </div>
+            </section>
+
+            <!-- Real-time Metrics -->
+            <section class="panel-section">
+                <div class="section-header">
+                    <span>Pipeline Performance</span>
+                    <span id="status-text" style="font-size: 0.75rem;">Connecting...</span>
+                </div>
+                <div class="metrics-grid">
+                    <div>ASR Latency: <span id="metric-asr" class="metric-val">0ms</span></div>
+                    <div>Gloss Latency: <span id="metric-gloss" class="metric-val">0ms</span></div>
+                    <div>Avatar Render FPS: <span id="metric-fps" class="metric-val">60</span></div>
+                    <div>WASM Kinematics: <span class="metric-val">Active</span></div>
+                </div>
+            </section>
+        </aside>
+    </div>
+
+    <!-- Application Modules -->
+    <script type="module" src="/static/js/app.js"></script>
+</body>
+</html>

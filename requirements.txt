@@ -1,0 +1,46 @@
+# HearLink ASL — Python Dependencies
+# Core ML
+torch>=2.1.0
+transformers>=4.36.0
+datasets>=2.16.0
+sentencepiece>=0.1.99
+accelerate>=0.25.0
+
+# ASR
+faster-whisper>=1.0.0
+
+# Model Export
+ctranslate2>=4.0.0
+onnx>=1.15.0
+onnxruntime>=1.16.0
+
+# Backend
+fastapi>=0.109.0
+uvicorn[standard]>=0.25.0
+websockets>=12.0
+python-multipart>=0.0.6
+
+# Pose Extraction
+mediapipe>=0.10.9
+opencv-python>=4.9.0
+numpy>=1.24.0
+
+# Evaluation
+sacrebleu>=2.4.0
+bert-score>=0.3.13
+rouge-score>=0.1.2
+evaluate>=0.4.1
+
+# Data Processing
+pandas>=2.1.0
+pyyaml>=6.0
+tqdm>=4.66.0
+httpx>=0.26.0
+requests>=2.31.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.23.0
+
+# Utilities
+msgpack>=1.0.7

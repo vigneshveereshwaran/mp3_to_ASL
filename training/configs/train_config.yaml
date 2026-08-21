@@ -1,0 +1,41 @@
+# HearLink ASL — Training Configuration
+# T5-small English → ASL Gloss Translation
+
+model:
+  name: "t5-small"
+  task_prefix: "translate English to ASL gloss: "
+
+data:
+  train_file: "datasets/data/train.jsonl"
+  val_file: "datasets/data/val.jsonl"
+  test_file: "datasets/data/test.jsonl"
+  max_input_length: 128
+  max_target_length: 64
+
+training:
+  output_dir: "training/checkpoints"
+  num_epochs: 1
+  batch_size: 16
+  gradient_accumulation_steps: 4
+  learning_rate: 2.0e-4
+  weight_decay: 0.01
+  warmup_steps: 500
+  lr_scheduler_type: "cosine"
+  fp16: "auto"  # auto-detect CUDA availability
+  early_stopping_patience: 3
+  save_total_limit: 3
+  logging_steps: 100
+  eval_steps: 500
+  seed: 42
+
+evaluation:
+  num_beams: 4
+  metrics:
+    - bleu
+    - rouge
+    - exact_match
+
+export:
+  format: "ctranslate2"
+  quantization: "int8"
+  output_dir: "app/models/ct2_gloss_model"
