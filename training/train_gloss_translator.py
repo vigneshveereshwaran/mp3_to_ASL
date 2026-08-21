@@ -227,7 +227,6 @@ def train(config_path: Optional[str] = None, resume_from: Optional[str] = None):
         predict_with_generate=True,
         generation_max_length=data_config["max_target_length"],
         logging_steps=train_config.get("logging_steps", 100),
-        logging_dir=os.path.join(output_dir, "logs"),
         report_to="none",  # Disable wandb/tensorboard
         seed=train_config.get("seed", 42),
         dataloader_num_workers=0,  # Windows compatibility
@@ -251,7 +250,7 @@ def train(config_path: Optional[str] = None, resume_from: Optional[str] = None):
         args=training_args,
         train_dataset=train_dataset,
         eval_dataset=val_dataset,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=metric_fn,
         callbacks=callbacks,

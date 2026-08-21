@@ -121,7 +121,7 @@ def benchmark_inference(ct2_model_dir: str, model_path: str,
         print(f"  Input ({words} words): \"{sentence}\"")
         print(f"  Output: \"{output_text}\"")
         print(f"  Latency: avg={avg_ms:.1f}ms  p50={p50:.1f}ms  p95={p95:.1f}ms  p99={p99:.1f}ms")
-        meets_target = "✓" if avg_ms < 50 else "✗"
+        meets_target = "[OK]" if avg_ms < 50 else "[FAIL]"
         print(f"  < 50ms target: {meets_target}")
         print()
 
